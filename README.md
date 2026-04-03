@@ -4,19 +4,29 @@
 
 ## Installation
 
-### Claude Code
+### Recommended (`npx skills`)
 
-Place this skill in your skills directory:
+Install from GitHub (global for OpenCode):
 
 ```bash
-# Clone into your skills directory
-git clone https://github.com/PaddlePaddle/paddleocr-ui-test.git
-cp -r paddleocr-ui-test/skills/paddleocr-ui-test ~/.agents/skills/paddleocr-ui-test
+npx skills add <owner>/paddleocr-ui-test --skill paddleocr-ui-test -g -a opencode -y
+```
+
+Install from GitHub (global for Claude Code):
+
+```bash
+npx skills add <owner>/paddleocr-ui-test --skill paddleocr-ui-test -g -a claude-code -y
+```
+
+List discoverable skills in the repository:
+
+```bash
+npx skills add <owner>/paddleocr-ui-test --list
 ```
 
 ### Manual
 
-Copy the `paddleocr-ui-test` directory to one of:
+Copy or symlink the repository root to one of:
 - `~/.agents/skills/paddleocr-ui-test/`
 - `~/.claude/skills/paddleocr-ui-test/`
 - `.claude/skills/paddleocr-ui-test/` (project-local)
