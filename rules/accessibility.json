@@ -2,8 +2,8 @@
   "version": "1.0",
   "description": "L4: Accessibility analysis rules",
   "agent_hints": {
-    "when_to_change": "表单页开启 missing_label；图片密集页确保 missing_alt 开启；需要检测 canvas 文字时开启 canvas_rendered_text",
-    "safe_defaults": "missing_alt 默认开启，其余默认关闭",
+    "when_to_change": "Enable missing_label for form pages; ensure missing_alt is enabled for image-heavy pages; enable canvas_rendered_text to detect canvas-drawn text",
+    "safe_defaults": "missing_alt enabled by default, others disabled",
     "tunable_params": ["missing_alt.enabled", "missing_alt.roles", "missing_label.enabled", "missing_label.roles", "canvas_rendered_text.enabled", "emoji_as_icon.enabled"]
   },
   "missing_alt": {

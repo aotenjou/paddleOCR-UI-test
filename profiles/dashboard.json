@@ -1,7 +1,7 @@
 {
   "name": "dashboard",
   "description": "Data dashboard / Analytics pages",
-  "when_to_use": "用户提到数据大屏、分析面板、图表页、实时监控页时使用",
+  "when_to_use": "Use when the user mentions data dashboards, analytics panels, chart pages, or real-time monitoring pages",
   "default_levels": ["L2", "L3", "L6"],
   "viewport": "1920x1080",
   "wait_ms": 5000,

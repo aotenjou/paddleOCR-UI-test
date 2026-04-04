@@ -2,8 +2,8 @@
   "version": "1.0",
   "description": "L6: Dynamic content state transition rules",
   "agent_hints": {
-    "when_to_change": "自定义 loading 文案时在 state_transitions 中添加对应模式；需要追踪关键文字时开启 content_persistence",
-    "safe_defaults": "loading→content 和 content→error 已内置；max_tracked_changes 5",
+    "when_to_change": "Add custom loading patterns to state_transitions; enable content_persistence to track critical text elements",
+    "safe_defaults": "loading->content and content->error built-in; max_tracked_changes 5",
     "tunable_params": ["state_transitions", "content_persistence.enabled", "content_persistence.critical_texts", "max_tracked_changes"]
   },
   "state_transitions": {

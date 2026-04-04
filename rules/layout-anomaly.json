@@ -2,8 +2,8 @@
   "version": "1.0",
   "description": "L2: Layout anomaly detection rules",
   "agent_hints": {
-    "when_to_change": "移动端页面开启 touch_target_size 和 overflow；数据大屏开启 element_overlap",
-    "safe_defaults": "overflow 和 full_page_text 默认开启，其余默认关",
+    "when_to_change": "Enable touch_target_size and overflow for mobile pages; enable element_overlap for data dashboards",
+    "safe_defaults": "overflow and full_page_text enabled by default, others disabled",
     "tunable_params": ["overflow.enabled", "element_overlap.enabled", "element_overlap.iou_threshold", "touch_target_size.enabled", "touch_target_size.min_width_px", "full_page_text.width_threshold", "full_page_text.height_threshold"]
   },
   "overflow": {

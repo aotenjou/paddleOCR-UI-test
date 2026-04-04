@@ -1,7 +1,7 @@
 {
   "name": "mobile",
   "description": "Mobile H5 / Responsive pages",
-  "when_to_use": "用户提到移动端页面、H5 页面、响应式设计、手机浏览器页面时使用",
+  "when_to_use": "Use when the user mentions mobile pages, H5 pages, responsive design, or mobile browser pages",
   "default_levels": ["L1", "L2", "L3", "L4"],
   "viewport": "375x812",
   "wait_ms": 3000,

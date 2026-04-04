@@ -1,7 +1,7 @@
 {
   "name": "form",
   "description": "Form / Login / Registration pages",
-  "when_to_use": "用户提到登录页、注册页、表单页、任何有输入框和提交按钮的页面时使用",
+  "when_to_use": "Use when the user mentions login pages, registration pages, form pages, or any page with input fields and submit buttons",
   "default_levels": ["L1", "L3", "L4"],
   "viewport": "1280x720",
   "wait_ms": 2000,

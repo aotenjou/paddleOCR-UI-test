@@ -2,8 +2,8 @@
   "version": "1.0",
   "description": "L5: Internationalization rules",
   "agent_hints": {
-    "when_to_change": "新增语言时在 languages 中添加 script_pattern；误判多时在 common_false_positives 中添加词",
-    "safe_defaults": "zh/en 已内置，ja/ko 可选；common_false_positives 包含常见缩写和术语",
+    "when_to_change": "Add new languages in languages with script_pattern; add false positive terms to common_false_positives",
+    "safe_defaults": "zh/en built-in, ja/ko optional; common_false_positives includes common abbreviations and technical terms",
     "tunable_params": ["languages", "common_false_positives", "mixed_language.enabled"]
   },
   "languages": {

@@ -1,7 +1,7 @@
 {
   "name": "saas",
   "description": "SaaS backend management system",
-  "when_to_use": "用户提到后台管理系统、数据表格页、admin 面板、CRM/ERP 系统时使用",
+  "when_to_use": "Use when the user mentions backend management systems, data table pages, admin panels, CRM/ERP systems",
   "default_levels": ["L1", "L2", "L3", "L5"],
   "viewport": "1920x1080",
   "wait_ms": 3000,

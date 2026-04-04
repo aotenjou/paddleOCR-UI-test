@@ -1,7 +1,7 @@
 {
   "name": "ecommerce",
   "description": "E-commerce website",
-  "when_to_use": "用户提到电商网站、商品列表、购物车、结算页、产品详情页时使用",
+  "when_to_use": "Use when the user mentions e-commerce websites, product listings, shopping carts, checkout pages, product detail pages",
   "default_levels": ["L1", "L2", "L3", "L4", "L5"],
   "viewport": "1440x900",
   "wait_ms": 4000,
