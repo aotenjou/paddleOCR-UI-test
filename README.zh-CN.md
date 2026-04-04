@@ -15,6 +15,68 @@
 
 PaddleOCR 填补了"像素"和"语义"之间的鸿沟——从截图中提取结构化的 UI 信息（文字内容、位置、布局关系），让 AI Agent 能像人一样"看懂"截图。
 
+## 架构
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        上游输出 (任意格式)                            │
+├─────────────┬──────────────┬──────────────┬─────────────────────────┤
+│  dogfood    │ ui-ux-pro-   │ dev-browser  │ 用户自然语言             │
+│  自由文本   │ max 设计系统  │ 页面状态      │                         │
+└──────┬──────┴──────┬───────┴──────┬───────┴────────────┬────────────┘
+       │             │              │                    │
+       ▼             ▼              ▼                    ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                     适配层 (Agent 转换)                               │
+│                                                                     │
+│  ┌─────────────┐  ┌──────────────┐  ┌──────────────┐               │
+│  │ 文本提取     │  │ 规则映射      │  │ 产物复用      │               │
+│  │ 自由文本     │  │ 设计建议     │  │ 复用已有     │               │
+│  │ → expected  │  │ → L4 规则    │  │ 浏览器会话   │               │
+│  │   _texts    │  │ 设计文案     │  │ 不重新加载   │               │
+│  │             │  │ → expected_  │  │              │               │
+│  │             │  │   texts      │  │              │               │
+│  └──────┬──────┘  └──────┬───────┘  └──────┬───────┘               │
+│         │                │                  │                       │
+│         └────────────────┼──────────────────┘                       │
+│                          ▼                                          │
+│              ┌───────────────────────┐                              │
+│              │  意图识别 (决策树)      │                              │
+│              │  "检查页面" → standalone│                              │
+│              │  "全面检查" → 全 levels │                              │
+│              │  "探索再检查" → dogfood │                              │
+│              │  "和之前比" → baseline  │                              │
+│              │  "设计对不对" → 设计验证 │                              │
+│              │  "操作后检查" → 会话复用 │                              │
+│              └───────────┬───────────┘                              │
+└──────────────────────────┼──────────────────────────────────────────┘
+                           ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    标准输入契约                                       │
+│          --url | --profile | --config | --levels | --annotate        │
+└──────────────────────────┬──────────────────────────────────────────┘
+                           ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                      本 skill 处理流程                                │
+│                                                                     │
+│  加载 rules/*.json → 阈值/策略/开关                                  │
+│  加载 profile      → levels/viewport/规则覆盖                        │
+│  Playwright 截图   → PaddleOCR 文字提取                              │
+│  A11y Tree 提取    → L1-L6 检测引擎                                  │
+│  BaselineDiff      → 回归对比 (可选)                                 │
+└──────────────────────────┬──────────────────────────────────────────┘
+                           ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    输出契约                                           │
+│       report.json | annotated.png | baseline.json | screenshot.png   │
+└──────────────────────────┬──────────────────────────────────────────┘
+                           ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                      下游消费                                         │
+│  dev-browser ← 坐标定位 | dogfood ← 补充发现 | CI/CD ← 构建状态      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
 ## 安装
 
 ### 推荐方式（`npx skills`）
@@ -22,19 +84,19 @@ PaddleOCR 填补了"像素"和"语义"之间的鸿沟——从截图中提取结
 从 GitHub 安装（OpenCode 全局）：
 
 ```bash
-npx skills add aotenjou/paddleocr-ui-test --skill paddleocr-ui-test -g -a opencode -y
+npx skills add aotenjou/paddleOCR-UI-test --skill paddleocr-ui-test -g -a opencode -y
 ```
 
 从 GitHub 安装（Claude Code 全局）：
 
 ```bash
-npx skills add aotenjou/paddleocr-ui-test --skill paddleocr-ui-test -g -a claude-code -y
+npx skills add aotenjou/paddleOCR-UI-test --skill paddleocr-ui-test -g -a claude-code -y
 ```
 
 列出仓库中可用的 skills：
 
 ```bash
-npx skills add aotenjou/paddleocr-ui-test --list
+npx skills add aotenjou/paddleOCR-UI-test --list
 ```
 
 ### 手动安装
@@ -59,116 +121,84 @@ export SILICONFLOW_API_KEY="your-api-key"
 或直接运行：
 
 ```bash
-python3 scripts/ui_test.py --url https://example.com --levels L1,L2,L3 --output results
+# 最小：只需 URL
+python3 scripts/ui_test.py --url https://example.com
+
+# 使用 profile（自动设置 levels、viewport、规则）
+python3 scripts/ui_test.py --url https://example.com --profile form
+
+# 指定预期文字
+python3 scripts/ui_test.py --url https://example.com --config test-config.json --annotate
+
+# 全面检查 + 标注截图
+python3 scripts/ui_test.py --url https://example.com --levels L1,L2,L3,L4,L5 --annotate
 ```
 
-### 命令行选项
+### 5 个控制旋钮
 
-| 选项 | 说明 | 默认值 |
-|------|------|--------|
-| `--url` | 目标 URL（必填） | — |
-| `--levels` | 测试级别（L1-L6，逗号分隔） | L1,L3 |
-| `--viewport` | 浏览器视口大小（宽x高） | 1280x720 |
-| `--wait` | 页面加载后等待时间（毫秒） | 2000 |
-| `--output` | 结果输出目录 | ./test-results |
-| `--format` | 输出格式：json, markdown, both | both |
-| `--source-map` | 源码映射目录（用于定位问题代码） | 无 |
-| `--annotate` | 生成标注截图 | false |
-| `--config` | 测试配置文件 JSON 路径 | 无 |
+| 旋钮 | 参数 | 说明 |
+|------|------|------|
+| 测试范围 | `--levels` | L1-L6，默认 L1,L3 |
+| 页面类型 | `--profile` | saas/ecommerce/form/content/dashboard/mobile |
+| 规则调优 | `rules/*.json` | 修改阈值、策略、开关 |
+| 具体期望 | `--config` | 预期文字、语言等 |
+| 回归对比 | `--baseline` | 保存基线或与历史对比 |
 
 ## 测试级别
 
 | 级别 | 场景 | 检测方法 |
 |------|------|---------|
-| L1 | 文字一致性 | OCR 文字 vs 预期文字 |
-| L2 | 布局合理性 | OCR 框坐标分析 |
+| L1 | 文字一致性 | OCR 文字 vs 预期文字（精确/子串/模糊） |
+| L2 | 布局合理性 | 溢出、重叠、触控区域大小 |
 | L3 | DOM 一致性 | OCR vs A11y Tree 交叉验证 |
-| L4 | 无障碍 | OCR + A11y 联合分析 |
-| L5 | 国际化 | OCR 语言检测 |
-| L6 | 动态内容 | 截图序列对比 |
-
-## 测试结果
-
-### Benchmark 对比
-
-基于 VisualWebArena 范式的对比实验（7 个任务，9 个 ground truth issues）：
-
-| 指标 | 纯 A11y | OCR+A11y | 提升 |
-|------|---------|----------|------|
-| **精确率** | 0.0% | 61.5% | +61.5pp |
-| **召回率** | 0.0% | 88.9% | +88.9pp |
-| **F1 分数** | 0.0% | 72.7% | +72.7pp |
-| **问题覆盖率** | 0.0% | 88.9% | +88.9pp |
-
-### 单元测试
-
-| 测试套件 | 通过 | 失败 | 总计 |
-|---------|------|------|------|
-| 核心算法（text_similarity, compare 等） | 40 | 0 | 40 |
-| 引擎 + 报告（L1-L6, ReportGenerator） | 24 | 0 | 24 |
-| **总计** | **64** | **0** | **64** |
-
-### 逐任务结果
-
-| 任务 | 描述 | A11y-only | 真实 OCR 结果 | 说明 |
-|------|------|-----------|-------------|------|
-| **T1** | 正常登录页 | ✅ 0/0 | ✅ 0 issues | 无问题页面，正确通过 |
-| **T2** | 按钮空格 | ❌ 0/1 | ⚠️ 自动纠正 | PaddleOCR-VL 的 LM 自动纠正了空格 |
-| **T3** | 错误信息可见 | ❌ 0/1 | ✅ 检测到 | OCR 发现隐藏元素意外可见 |
-| **T4** | 页脚文字缺失 | ❌ 0/1 | ✅ 检测到 | OCR 发现 DOM 声明的文字未渲染 |
-| **T5** | 中文字符错误 | ❌ 0/1 | ⚠️ 自动纠正 | PaddleOCR-VL 的 LM 自动纠正了形近字 |
-| **T6** | 国际化问题 | ❌ 0/1 | ⚠️ 需配置 | 需要预期语言配置才能检测 |
-| **T7** | 多问题组合 | ❌ 0/4 | ✅ 3/4 | 检测到 3/4 个真实问题 |
-
-### 关键发现
-
-1. **纯 A11y 方案对视觉渲染问题零检测率** — 只能看到"DOM 声明了什么"，无法验证"用户实际看到了什么"
-2. **OCR+A11y 交叉验证有效检测视觉问题** — 在模拟 benchmark 中检测到 8/9 个 ground truth issues（召回率 88.9%）
-3. **PaddleOCR-VL 的 LM 自动纠正** — 内置语言模型会自动纠正识别结果（如"登 录"→"登录"），适合语义理解但不适合精确字符级检测。对于需要精确检测的场景，建议使用不带 LM 的两阶段 PaddleOCR 模型
-4. **中文 UI 测试是 PaddleOCR 的天然优势** — 大多数 OCR 方案对中文支持差，PaddleOCR 是差异化竞争点
-
-## 架构
-
-```
-┌─────────────────────────────────────────────────────┐
-│                  AI Agent (LLM)                      │
-│         综合分析 → 测试报告 → 修复建议                │
-└───────────────┬──────────────────────┬──────────────┘
-                │                      │
-    ┌───────────▼──────────┐  ┌───────▼──────────────┐
-    │   PaddleOCR 引擎      │  │  前端代码分析层        │
-    │  截图 → 结构化UI信息   │  │  DOM + A11y Tree     │
-    │  - 文字内容 + 坐标    │  │  - 组件树             │
-    │  - 文本区域框        │  │  - 元素属性/状态       │
-    │  - 布局关系          │  │  - 样式信息            │
-    └───────────┬──────────┘  └───────┬──────────────┘
-                │                      │
-    ┌───────────▼──────────────────────▼──────────────┐
-    │           测试执行层 (Playwright)                 │
-    │         截图 + DOM Snapshot + A11y Tree          │
-    └─────────────────────────────────────────────────┘
-```
+| L4 | 无障碍 | 缺失 alt/label、canvas 文字、emoji 图标 |
+| L5 | 国际化 | 语言检测（zh/en/ja/ko） |
+| L6 | 动态内容 | 动作序列 + 截图前后对比 |
 
 ## 项目结构
 
 ```
 paddleOCR-UItest/
-├── SKILL.md                  # Skill 核心指令
-├── skill.json                # Skill 元数据
-├── README.md                 # 英文文档
-├── README.zh-CN.md           # 中文文档
-├── LICENSE                   # Apache-2.0
+├── SKILL.md                          # Agent 指令（5 个控制旋钮）
+├── skill.json                        # Skill 元数据
+├── README.md                         # 英文文档
+├── README.zh-CN.md                   # 中文文档
+├── LICENSE                           # Apache-2.0
+├── rules/                            # 数据驱动规则（6 个文件，含 agent_hints）
+│   ├── text-consistency.json         # L1: 匹配策略、阈值、忽略模式
+│   ├── layout-anomaly.json           # L2: 溢出、重叠、触控区域
+│   ├── dom-ocr-crossval.json         # L3: 模糊匹配、数量差异
+│   ├── accessibility.json            # L4: alt、label、canvas、emoji
+│   ├── i18n.json                     # L5: 语言正则、误判词
+│   └── dynamic-content.json          # L6: 状态转换、追踪数
+├── profiles/                         # 行业预设（6 个文件，含 when_to_use）
+│   ├── saas.json                     # 后台管理系统
+│   ├── ecommerce.json                # 电商网站
+│   ├── form.json                     # 表单/登录页
+│   ├── content.json                  # 博客/文章页
+│   ├── dashboard.json                # 数据大屏
+│   └── mobile.json                   # 移动端 H5
 ├── scripts/
-│   ├── ui_test.py            # 主测试脚本
-│   ├── compare_ocr_dom.py    # OCR vs DOM 交叉验证引擎
-│   └── source_map_lookup.py  # 源码位置映射
+│   ├── ui_test.py                    # 主测试脚本
+│   ├── compare_ocr_dom.py            # OCR vs DOM 交叉验证引擎（支持 --ci）
+│   ├── baseline_diff.py              # 基线回归对比引擎
+│   ├── annotate_screenshot.py        # 标注截图生成
+│   └── source_map_lookup.py          # 源码位置映射
 ├── references/
-│   ├── ocr-api.md            # PaddleOCR API 配置
-│   ├── a11y-tree.md          # 无障碍树格式
-│   └── test-patterns.md      # 常见测试模式
+│   ├── ocr-api.md                    # PaddleOCR API 配置
+│   ├── a11y-tree.md                  # 无障碍树格式
+│   └── test-patterns.md              # 常见测试模式 + CI/CD 示例
 └── examples/
-    └── test-config.json      # 测试配置示例
+    └── test-config.json              # 测试配置示例
 ```
+
+## 与其他 Skill 协作
+
+本 skill 设计为与其他 UI 测试 skill 协同工作：
+
+- **dogfood**：探索性测试 → 发现的问题转为 `expected_texts` → 本 skill 做回归守卫
+- **dev-browser**：浏览器自动化 → 导航页面 → 本 skill 验证最终状态
+- **ui-ux-pro-max**：设计系统 → 定义预期 UI → 本 skill 验证实现匹配设计
 
 ## CI/CD 集成
 
