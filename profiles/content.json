@@ -1,0 +1,12 @@
+{
+  "name": "content",
+  "description": "Content / Blog / News pages",
+  "when_to_use": "用户提到博客、新闻页、文章页、文档页、内容展示页时使用",
+  "default_levels": ["L1", "L2", "L3"],
+  "viewport": "1440x900",
+  "wait_ms": 2000,
+  "rule_overrides": {
+    "layout-anomaly.full_page_text.width_threshold": 0.9,
+    "layout-anomaly.full_page_text.height_threshold": 0.5
+  }
+}

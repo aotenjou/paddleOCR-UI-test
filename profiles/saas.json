@@ -1,0 +1,17 @@
+{
+  "name": "saas",
+  "description": "SaaS backend management system",
+  "when_to_use": "用户提到后台管理系统、数据表格页、admin 面板、CRM/ERP 系统时使用",
+  "default_levels": ["L1", "L2", "L3", "L5"],
+  "viewport": "1920x1080",
+  "wait_ms": 3000,
+  "rule_overrides": {
+    "dom-ocr-crossval.fuzzy_match.enabled": true,
+    "dom-ocr-crossval.count_mismatch.delta_threshold": 0.15
+  },
+  "expected_elements": [
+    {"role": "navigation", "min_count": 1},
+    {"role": "table", "min_count": 0}
+  ],
+  "ignore_patterns": ["^v\\d+\\.\\d+", "^[a-f0-9]{7}$"]
+}

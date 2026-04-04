@@ -1,0 +1,38 @@
+{
+  "version": "1.0",
+  "description": "L5: Internationalization rules",
+  "agent_hints": {
+    "when_to_change": "新增语言时在 languages 中添加 script_pattern；误判多时在 common_false_positives 中添加词",
+    "safe_defaults": "zh/en 已内置，ja/ko 可选；common_false_positives 包含常见缩写和术语",
+    "tunable_params": ["languages", "common_false_positives", "mixed_language.enabled"]
+  },
+  "languages": {
+    "zh": {
+      "script_pattern": "[\\u4e00-\\u9fff]",
+      "min_word_length": 1,
+      "description": "Chinese"
+    },
+    "en": {
+      "script_pattern": "[a-zA-Z]{4,}",
+      "min_word_length": 4,
+      "description": "English"
+    },
+    "ja": {
+      "script_pattern": "[\\u3040-\\u309f\\u30a0-\\u30ff\\u4e00-\\u9fff]",
+      "min_word_length": 1,
+      "description": "Japanese"
+    },
+    "ko": {
+      "script_pattern": "[\\uac00-\\ud7af\\u1100-\\u11ff]",
+      "min_word_length": 1,
+      "description": "Korean"
+    }
+  },
+  "mixed_language": {
+    "enabled": false,
+    "severity": "info"
+  },
+  "common_false_positives": [
+    "OK", "Login", "Sign Up", "API", "URL", "ID", "CSS", "HTML", "JS"
+  ]
+}

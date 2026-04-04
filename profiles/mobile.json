@@ -1,0 +1,14 @@
+{
+  "name": "mobile",
+  "description": "Mobile H5 / Responsive pages",
+  "when_to_use": "用户提到移动端页面、H5 页面、响应式设计、手机浏览器页面时使用",
+  "default_levels": ["L1", "L2", "L3", "L4"],
+  "viewport": "375x812",
+  "wait_ms": 3000,
+  "rule_overrides": {
+    "layout-anomaly.touch_target_size.enabled": true,
+    "layout-anomaly.touch_target_size.min_width_px": 44,
+    "layout-anomaly.touch_target_size.min_height_px": 44,
+    "layout-anomaly.overflow.enabled": true
+  }
+}

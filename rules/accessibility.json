@@ -1,0 +1,30 @@
+{
+  "version": "1.0",
+  "description": "L4: Accessibility analysis rules",
+  "agent_hints": {
+    "when_to_change": "表单页开启 missing_label；图片密集页确保 missing_alt 开启；需要检测 canvas 文字时开启 canvas_rendered_text",
+    "safe_defaults": "missing_alt 默认开启，其余默认关闭",
+    "tunable_params": ["missing_alt.enabled", "missing_alt.roles", "missing_label.enabled", "missing_label.roles", "canvas_rendered_text.enabled", "emoji_as_icon.enabled"]
+  },
+  "missing_alt": {
+    "enabled": true,
+    "roles": ["image", "graphic", "img"],
+    "ignore_values": ["", "image", "icon"],
+    "severity": "error"
+  },
+  "missing_label": {
+    "enabled": false,
+    "roles": ["button", "textbox", "checkbox", "radio", "combobox"],
+    "severity": "error"
+  },
+  "canvas_rendered_text": {
+    "enabled": false,
+    "description": "Text visible in OCR but not in accessibility tree",
+    "severity": "warning"
+  },
+  "emoji_as_icon": {
+    "enabled": false,
+    "emoji_pattern": "[\\U0001F600-\\U0001F64F\\U0001F300-\\U0001F5FF\\U0001F680-\\U0001F6FF\\U0001F1E0-\\U0001F1FF\\u2600-\\u26FF\\u2700-\\u27BF]",
+    "severity": "warning"
+  }
+}

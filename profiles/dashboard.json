@@ -1,0 +1,13 @@
+{
+  "name": "dashboard",
+  "description": "Data dashboard / Analytics pages",
+  "when_to_use": "用户提到数据大屏、分析面板、图表页、实时监控页时使用",
+  "default_levels": ["L2", "L3", "L6"],
+  "viewport": "1920x1080",
+  "wait_ms": 5000,
+  "rule_overrides": {
+    "dom-ocr-crossval.count_mismatch.delta_threshold": 0.1,
+    "layout-anomaly.element_overlap.enabled": true,
+    "dynamic-content.content_persistence.enabled": true
+  }
+}

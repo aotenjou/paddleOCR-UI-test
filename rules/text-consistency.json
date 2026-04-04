@@ -1,0 +1,32 @@
+{
+  "version": "1.0",
+  "description": "L1: Text consistency rules",
+  "agent_hints": {
+    "when_to_change": "用户要求严格匹配时设 default_strategy 为 exact，允许拼写误差时设为 fuzzy",
+    "safe_defaults": "substring 适用于大多数场景",
+    "tunable_params": ["default_strategy", "match_strategies.fuzzy.threshold", "ignore_patterns", "max_results_per_check"]
+  },
+  "match_strategies": {
+    "exact": {
+      "type": "exact",
+      "description": "Exact string match"
+    },
+    "substring": {
+      "type": "substring",
+      "description": "Substring match (default)"
+    },
+    "fuzzy": {
+      "type": "fuzzy",
+      "threshold": 0.8,
+      "description": "LCS-based fuzzy matching"
+    }
+  },
+  "default_strategy": "substring",
+  "severity_overrides": {
+    "text_missing": "error",
+    "text_mismatch": "error",
+    "extra_text": "info"
+  },
+  "max_results_per_check": 10,
+  "ignore_patterns": []
+}

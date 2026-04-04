@@ -1,0 +1,12 @@
+{
+  "name": "form",
+  "description": "Form / Login / Registration pages",
+  "when_to_use": "用户提到登录页、注册页、表单页、任何有输入框和提交按钮的页面时使用",
+  "default_levels": ["L1", "L3", "L4"],
+  "viewport": "1280x720",
+  "wait_ms": 2000,
+  "rule_overrides": {
+    "accessibility.missing_label.enabled": true,
+    "accessibility.missing_label.roles": ["textbox", "button", "checkbox"]
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "version": "1.0",
+  "description": "L6: Dynamic content state transition rules",
+  "agent_hints": {
+    "when_to_change": "自定义 loading 文案时在 state_transitions 中添加对应模式；需要追踪关键文字时开启 content_persistence",
+    "safe_defaults": "loading→content 和 content→error 已内置；max_tracked_changes 5",
+    "tunable_params": ["state_transitions", "content_persistence.enabled", "content_persistence.critical_texts", "max_tracked_changes"]
+  },
+  "state_transitions": {
+    "loading_to_content": {
+      "should_disappear": ["Loading...", "loading", "spinner", "请稍候"],
+      "should_appear": [],
+      "timeout_ms": 5000
+    },
+    "content_to_error": {
+      "should_disappear": [],
+      "should_appear": ["Error", "error", "失败", "异常"],
+      "timeout_ms": 10000
+    }
+  },
+  "content_persistence": {
+    "enabled": false,
+    "critical_texts": []
+  },
+  "max_tracked_changes": 5
+}

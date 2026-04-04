@@ -1,0 +1,32 @@
+{
+  "version": "1.0",
+  "description": "L3: DOM vs OCR cross-validation rules",
+  "agent_hints": {
+    "when_to_change": "文字渲染有细微差异时降低 fuzzy_match.threshold；数据表格页降低 count_mismatch.delta_threshold",
+    "safe_defaults": "fuzzy_match 开启，threshold 0.6；count_mismatch delta 0.3",
+    "tunable_params": ["fuzzy_match.enabled", "fuzzy_match.threshold", "fuzzy_match.warning_threshold", "count_mismatch.delta_threshold", "count_mismatch.min_elements", "ignore_patterns"]
+  },
+  "fuzzy_match": {
+    "enabled": true,
+    "algorithm": "lcs",
+    "threshold": 0.6,
+    "warning_threshold": 0.7
+  },
+  "count_mismatch": {
+    "enabled": true,
+    "delta_threshold": 0.3,
+    "min_elements": 5,
+    "severity": "warning"
+  },
+  "dom_not_rendered": {
+    "max_results": 10,
+    "severity": "error"
+  },
+  "rendered_not_in_dom": {
+    "max_results": 10,
+    "severity": "warning"
+  },
+  "ignore_patterns": [
+    "^[\\s\\u200b\\u200c\\u200d]+$"
+  ]
+}
