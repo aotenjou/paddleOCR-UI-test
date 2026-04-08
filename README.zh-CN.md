@@ -4,6 +4,12 @@
 
 [English README](README.md)
 
+## 一键安装
+
+```bash
+npx skills add aotenjou/paddleOCR-UI-test --skill paddleocr-ui-test
+```
+
 ## 概述
 
 传统 UI 测试工具存在盲区：
@@ -130,13 +136,19 @@ flowchart TB
 
 ### 推荐方式（`npx skills`）
 
-从 GitHub 安装（OpenCode 全局）：
+从 GitHub 安装：
+
+```bash
+npx skills add aotenjou/paddleOCR-UI-test --skill paddleocr-ui-test
+```
+
+OpenCode 全局免交互安装：
 
 ```bash
 npx skills add aotenjou/paddleOCR-UI-test --skill paddleocr-ui-test -g -a opencode -y
 ```
 
-从 GitHub 安装（Claude Code 全局）：
+Claude Code 全局免交互安装：
 
 ```bash
 npx skills add aotenjou/paddleOCR-UI-test --skill paddleocr-ui-test -g -a claude-code -y

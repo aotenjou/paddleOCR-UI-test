@@ -4,6 +4,12 @@
 
 [中文文档](README.zh-CN.md)
 
+## Quick Install
+
+```bash
+npx skills add aotenjou/paddleOCR-UI-test --skill paddleocr-ui-test
+```
+
 ## Overview
 
 Traditional UI testing tools have blind spots:
@@ -130,13 +136,19 @@ Detectors declare required capabilities in `scripts/engines/`. Missing requireme
 
 ### Recommended (`npx skills`)
 
-Install from GitHub (global for OpenCode):
+Install from GitHub:
+
+```bash
+npx skills add aotenjou/paddleOCR-UI-test --skill paddleocr-ui-test
+```
+
+Global non-interactive install for OpenCode:
 
 ```bash
 npx skills add aotenjou/paddleOCR-UI-test --skill paddleocr-ui-test -g -a opencode -y
 ```
 
-Install from GitHub (global for Claude Code):
+Global non-interactive install for Claude Code:
 
 ```bash
 npx skills add aotenjou/paddleOCR-UI-test --skill paddleocr-ui-test -g -a claude-code -y
