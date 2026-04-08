@@ -121,6 +121,25 @@ Profile 自动设置 levels、viewport、wait_ms 和规则覆盖。
 本 skill 接受的最小输入: `--url` (必须)。
 上游 skill 不需要知道本 skill 的 config 格式，agent 负责转换。
 
+新增轻量柔性适配输入模式（保持原能力不变）：
+
+- `--input-mode url`（默认）：原有模式，skill 自己采集 screenshot + a11y
+- `--input-mode artifacts --artifacts-dir <dir>`：消费上游导出的页面产物
+- `--input-mode mcp --input-json <file>`：消费 MCP payload（v1 仅路径型字段）
+
+MCP payload v1 示例：
+
+```json
+{
+  "source": "playwright-mcp",
+  "url": "https://example.com",
+  "viewport": "1280x720",
+  "screenshot_path": "./artifacts/screenshot.png",
+  "a11y_tree_path": "./artifacts/a11y_tree.json",
+  "dom_path": "./artifacts/dom.html"
+}
+```
+
 ### 上游输出适配
 
 | 上游输出 | 转换方式 | 示例 |
@@ -156,6 +175,14 @@ Profile 自动设置 levels、viewport、wait_ms 和规则覆盖。
    - A11y Tree: `page.evaluate(A11Y_TREE_SCRIPT)`
 2. 本 skill 直接消费这些产物，不重新加载页面
 3. 好处: 保持 session/cookie 一致，节省 API 调用
+
+Playwright MCP / UI test generation MCP 下游接入建议：
+
+1. 上游 MCP 导出 screenshot + a11y tree + dom 到本地 artifacts
+2. 本 skill 使用 `--input-mode artifacts` 或 `--input-mode mcp` 直接消费
+3. 本 skill 输出 `report.json` / `annotated.png` 继续给下游 agent/MCP 使用
+
+说明：`L6 --actions` 在当前轻量版本仅在 `url` 模式执行。
 
 ### Output Contract
 

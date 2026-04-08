@@ -53,7 +53,8 @@ PaddleOCR bridges the gap between "pixels" and "semantics" — extracting struct
                            ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                    Standard Input Contract                           │
-│          --url | --profile | --config | --levels | --annotate        │
+│   --url | --input-mode | --artifacts-dir | --input-json | --source   │
+│      + --profile | --config | --levels | --annotate | --baseline     │
 └──────────────────────────┬──────────────────────────────────────────┘
                            ▼
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -132,6 +133,25 @@ python3 scripts/ui_test.py --url https://example.com --config test-config.json -
 
 # Full suite with annotated screenshot
 python3 scripts/ui_test.py --url https://example.com --levels L1,L2,L3,L4,L5 --annotate
+
+# Consume pre-captured artifacts (dev-browser / Playwright MCP output)
+python3 scripts/ui_test.py --input-mode artifacts --artifacts-dir ./artifacts --source playwright-mcp
+
+# Consume MCP payload JSON (path-based payload v1)
+python3 scripts/ui_test.py --input-mode mcp --input-json ./mcp-payload.json --source ui-test-generation-mcp
+```
+
+### MCP Payload (v1 path-based)
+
+```json
+{
+  "source": "playwright-mcp",
+  "url": "https://example.com",
+  "viewport": "1280x720",
+  "screenshot_path": "./artifacts/screenshot.png",
+  "a11y_tree_path": "./artifacts/a11y_tree.json",
+  "dom_path": "./artifacts/dom.html"
+}
 ```
 
 ### 5 Control Knobs
@@ -180,10 +200,17 @@ paddleOCR-UItest/
 │   └── mobile.json                   # Mobile H5 pages
 ├── scripts/
 │   ├── ui_test.py                    # Main test runner
+│   ├── smoke_input_modes.py          # Lightweight adapter smoke checks
 │   ├── compare_ocr_dom.py            # Standalone OCR vs DOM validator (--ci)
 │   ├── baseline_diff.py              # Baseline regression engine
 │   ├── annotate_screenshot.py        # Annotated screenshot generator
-│   └── source_map_lookup.py          # Source code location resolver
+│   ├── source_map_lookup.py          # Source code location resolver
+│   └── adapters/                     # Flexible input adapters
+│       ├── base.py                   # Evidence bundle contract
+│       ├── registry.py               # Auto input-mode selection
+│       ├── standalone_url.py         # Backward-compatible URL capture
+│       ├── artifact_dir.py           # Consume screenshot/a11y/dom artifacts
+│       └── mcp_payload.py            # Consume MCP payload JSON
 ├── references/
 │   ├── ocr-api.md                    # PaddleOCR API configuration
 │   ├── a11y-tree.md                  # Accessibility tree format
@@ -199,6 +226,15 @@ This skill is designed to work alongside other UI testing skills:
 - **dogfood**: Exploratory testing → discoveries become `expected_texts` config → this skill guards against regressions
 - **dev-browser**: Browser automation → navigates pages → this skill validates the final state
 - **ui-ux-pro-max**: Design system → defines expected UI → this skill verifies implementation matches design
+
+### Flexible Adapter Layer (lightweight)
+
+- Keeps existing L1-L6 engine unchanged; only extends input ingestion layer.
+- Backward compatible: existing `--url` workflow still works.
+- Adds downstream-friendly modes for MCP outputs:
+  - `--input-mode artifacts --artifacts-dir <dir>`
+  - `--input-mode mcp --input-json <file>`
+- Current limitation: `L6 --actions` is supported in `url` mode only.
 
 See `SKILL.md` for the full integration protocol including input/output contracts and collaboration modes.
 

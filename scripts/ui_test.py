@@ -26,7 +26,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from PIL import Image
-from playwright.async_api import async_playwright
+
+from adapters.registry import build_adapter
+from adapters.standalone_url import capture_from_url
 
 try:
     from openai import AsyncOpenAI
@@ -869,12 +871,14 @@ class ReportGenerator:
         output_dir: str,
         image_size: Tuple[int, int],
         duration: float,
+        metadata: Optional[Dict[str, Any]] = None,
     ):
         self.url = url
         self.results = results
         self.output_dir = Path(output_dir)
         self.image_size = image_size
         self.duration = duration
+        self.metadata = metadata or {}
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def _summary(self) -> Dict[str, int]:
@@ -894,6 +898,7 @@ class ReportGenerator:
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "image_size": list(self.image_size),
             "duration_seconds": round(self.duration, 2),
+            "metadata": self.metadata,
             "summary": {
                 "total_checks": summary["total"],
                 "passed": summary["total"] - summary["error"] - summary["warning"],
@@ -963,91 +968,6 @@ class ReportGenerator:
         return str(path)
 
 
-# ─── Main ────────────────────────────────────────────────────────────────────
-
-A11Y_TREE_SCRIPT = """() => {
-    function buildA11yTree(node, depth = 0) {
-        if (depth > 20) return null;
-        const role = node.getAttribute('role') ||
-            (node.tagName === 'BUTTON' ? 'button' : '') ||
-            (node.tagName === 'INPUT' ? 'textbox' : '') ||
-            (node.tagName === 'IMG' ? 'img' : '') ||
-            (node.tagName === 'A' ? 'link' : '') ||
-            (node.tagName === 'H1' ? 'heading' : '') ||
-            (node.tagName === 'H2' ? 'heading' : '') ||
-            (node.tagName === 'H3' ? 'heading' : '') ||
-            (node.tagName === 'H4' ? 'heading' : '') ||
-            (node.tagName === 'H5' ? 'heading' : '') ||
-            (node.tagName === 'H6' ? 'heading' : '') ||
-            (node.tagName === 'NAV' ? 'navigation' : '') ||
-            (node.tagName === 'MAIN' ? 'main' : '') ||
-            (node.tagName === 'HEADER' ? 'banner' : '') ||
-            (node.tagName === 'FOOTER' ? 'contentinfo' : '') ||
-            node.tagName?.toLowerCase() || '';
-        const name = node.getAttribute('aria-label') ||
-            node.getAttribute('alt') ||
-            node.textContent?.trim().substring(0, 200) || '';
-        const rect = node.getBoundingClientRect();
-        const result = {
-            role: role || 'generic',
-            name: name,
-            bounds: {
-                x: Math.round(rect.x),
-                y: Math.round(rect.y),
-                width: Math.round(rect.width),
-                height: Math.round(rect.height)
-            },
-            tagName: node.tagName,
-            visible: rect.width > 0 && rect.height > 0
-        };
-        const children = [];
-        for (const child of node.children) {
-            const childTree = buildA11yTree(child, depth + 1);
-            if (childTree) children.push(childTree);
-        }
-        if (children.length) result.children = children;
-        return result;
-    }
-    return buildA11yTree(document.body);
-}"""
-
-
-async def execute_actions(page, actions_str: str) -> None:
-    """Parse and execute an action sequence.
-
-    Supported actions:
-    - click(selector)
-    - wait(milliseconds)
-    - type(selector, "text")
-    - screenshot (no-op, handled by caller)
-    """
-    actions = actions_str.split(";")
-    for action in actions:
-        action = action.strip()
-        if not action:
-            continue
-        if action.startswith("click("):
-            selector = action[6:-1]
-            print(f"  Clicking: {selector}")
-            await page.click(selector)
-        elif action.startswith("wait("):
-            ms = int(action[5:-1])
-            print(f"  Waiting: {ms}ms")
-            await page.wait_for_timeout(ms)
-        elif action.startswith("type("):
-            inner = action[5:-1]
-            comma_idx = inner.find(",")
-            if comma_idx != -1:
-                selector = inner[:comma_idx].strip()
-                text = inner[comma_idx + 1 :].strip().strip('"').strip("'")
-                print(f"  Typing '{text}' into: {selector}")
-                await page.fill(selector, text)
-        elif action == "screenshot":
-            pass
-        else:
-            print(f"  Unknown action: {action}")
-
-
 async def run_test(args) -> None:
     """Execute the full UI test pipeline."""
     start_time = time.time()
@@ -1084,141 +1004,171 @@ async def run_test(args) -> None:
         levels = ["L1", "L3"]
 
     viewport_str = args.viewport or profile.get("viewport", "1280x720")
-    viewport = tuple(map(int, viewport_str.split("x")))
-
     wait_ms = config.get("wait_ms", profile.get("wait_ms", args.wait))
 
-    screenshot_path = Path(args.output) / "screenshot.png"
     Path(args.output).mkdir(parents=True, exist_ok=True)
 
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page(
-            viewport={"width": viewport[0], "height": viewport[1]}
+    adapter, input_mode = build_adapter(args)
+
+    if input_mode == "url":
+        if not args.url:
+            print("Error: --url is required when input mode is 'url'")
+            sys.exit(1)
+        screenshot_path = Path(args.output) / "screenshot.png"
+        after_screenshot_path = Path(args.output) / "screenshot_after.png"
+        bundle, after_capture_path = await capture_from_url(
+            url=args.url,
+            viewport=viewport_str,
+            wait_ms=wait_ms,
+            screenshot_path=screenshot_path,
+            source=args.source or "standalone",
+            actions=args.actions if "L6" in levels and args.actions else None,
+            after_screenshot_path=after_screenshot_path,
         )
+    else:
+        bundle = await adapter.load_bundle()
+        after_capture_path = None
+        screenshot_path = Path(bundle.screenshot_path)
 
-        print(f"Navigating to {args.url} ...")
-        await page.goto(args.url, wait_until="networkidle")
-        await page.wait_for_timeout(wait_ms)
+    if str(screenshot_path.resolve()) != str(
+        (Path(args.output) / "screenshot.png").resolve()
+    ):
+        output_screenshot = Path(args.output) / "screenshot.png"
+        output_screenshot.write_bytes(screenshot_path.read_bytes())
+        screenshot_path = output_screenshot
 
-        print("Capturing screenshot ...")
-        await page.screenshot(path=str(screenshot_path), full_page=True)
+    a11y_elements = parse_a11y_tree(bundle.a11y_tree or {})
 
-        print("Extracting accessibility tree ...")
-        a11y_tree = await page.evaluate(A11Y_TREE_SCRIPT)
-        a11y_elements = parse_a11y_tree(a11y_tree or {})
+    img = Image.open(screenshot_path)
+    image_size = img.size
 
-        img = Image.open(screenshot_path)
-        image_size = img.size
+    print(f"Sending screenshot to PaddleOCR ({image_size[0]}x{image_size[1]}) ...")
+    ocr_result = await ocr_client.recognize(str(screenshot_path))
 
-        print(f"Sending screenshot to PaddleOCR ({image_size[0]}x{image_size[1]}) ...")
-        ocr_result = await ocr_client.recognize(str(screenshot_path))
-
-        before_ocr = None
-        after_ocr = None
-        if "L6" in levels and args.actions:
+    before_ocr = None
+    after_ocr = None
+    if "L6" in levels and args.actions:
+        if input_mode != "url":
+            print(
+                "Warning: L6 actions are supported only in URL mode in this lightweight adapter version"
+            )
+        else:
             before_ocr = ocr_result
-            print(f"Executing actions: {args.actions} ...")
-            await execute_actions(page, args.actions)
+            if after_capture_path:
+                print("Running after-action OCR ...")
+                after_ocr = await ocr_client.recognize(after_capture_path)
 
-            print("Capturing after-action screenshot ...")
-            after_screenshot_path = Path(args.output) / "screenshot_after.png"
-            await page.screenshot(path=str(after_screenshot_path), full_page=True)
+    print(f"Running test levels: {', '.join(levels)} ...")
+    engine = UITestEngine(
+        ocr_result=ocr_result,
+        a11y_elements=a11y_elements,
+        config=config,
+        image_size=image_size,
+        rules=rules,
+    )
+    results = engine.run(levels, before_ocr=before_ocr, after_ocr=after_ocr)
 
-            print("Running after-action OCR ...")
-            after_ocr = await ocr_client.recognize(str(after_screenshot_path))
+    if args.baseline:
+        from baseline_diff import create_baseline
 
-        print(f"Running test levels: {', '.join(levels)} ...")
-        engine = UITestEngine(
+        baseline_data = create_baseline(
             ocr_result=ocr_result,
             a11y_elements=a11y_elements,
-            config=config,
+            url=bundle.url or args.url or "",
+            viewport=bundle.viewport or viewport_str,
             image_size=image_size,
-            rules=rules,
+            summary={"total": len(results), "error": 0, "warning": 0, "info": 0},
         )
-        results = engine.run(levels, before_ocr=before_ocr, after_ocr=after_ocr)
+        baseline_path = Path(args.output) / "baseline.json"
+        baseline_path.write_text(
+            json.dumps(baseline_data, indent=2, ensure_ascii=False)
+        )
+        print(f"  Baseline saved: {baseline_path}")
 
-        if args.baseline:
-            from baseline_diff import create_baseline
+    if args.baseline_file:
+        baseline_data = json.loads(Path(args.baseline_file).read_text())
+        from baseline_diff import BaselineDiff
 
-            baseline_data = create_baseline(
-                ocr_result=ocr_result,
-                a11y_elements=a11y_elements,
-                url=args.url,
-                viewport=viewport_str,
-                image_size=image_size,
-                summary={"total": len(results), "error": 0, "warning": 0, "info": 0},
-            )
-            baseline_path = Path(args.output) / "baseline.json"
-            baseline_path.write_text(
-                json.dumps(baseline_data, indent=2, ensure_ascii=False)
-            )
-            print(f"  Baseline saved: {baseline_path}")
-
-        if args.baseline_file:
-            baseline_data = json.loads(Path(args.baseline_file).read_text())
-            from baseline_diff import BaselineDiff
-
-            diff_engine = BaselineDiff(
-                current_ocr=ocr_result,
-                current_a11y=a11y_elements,
-                baseline_data=baseline_data,
-                threshold=args.diff_threshold,
-                image_size=image_size,
-            )
-            diff_results = diff_engine.run()
-            results.extend(diff_results)
-            print(f"  Baseline diff: {len(diff_results)} issues found")
-
-        duration = time.time() - start_time
-
-        print(f"Generating reports to {args.output} ...")
-        reporter = ReportGenerator(
-            url=args.url,
-            results=results,
-            output_dir=args.output,
+        diff_engine = BaselineDiff(
+            current_ocr=ocr_result,
+            current_a11y=a11y_elements,
+            baseline_data=baseline_data,
+            threshold=args.diff_threshold,
             image_size=image_size,
-            duration=duration,
         )
+        diff_results = diff_engine.run()
+        results.extend(diff_results)
+        print(f"  Baseline diff: {len(diff_results)} issues found")
 
-        if args.format in ("json", "both"):
-            json_path = reporter.generate_json()
-            print(f"  JSON report: {json_path}")
+    duration = time.time() - start_time
 
-        if args.format in ("markdown", "both"):
-            md_path = reporter.generate_markdown()
-            print(f"  Markdown report: {md_path}")
+    print(f"Generating reports to {args.output} ...")
+    reporter = ReportGenerator(
+        url=bundle.url or args.url or "(external artifact)",
+        results=results,
+        output_dir=args.output,
+        image_size=image_size,
+        duration=duration,
+        metadata={
+            "input_mode": input_mode,
+            "source": bundle.source,
+        },
+    )
 
-        if args.annotate:
-            from annotate_screenshot import annotate_screenshot
+    if args.format in ("json", "both"):
+        json_path = reporter.generate_json()
+        print(f"  JSON report: {json_path}")
 
-            annotated_path = Path(args.output) / "annotated.png"
-            annotate_screenshot(str(screenshot_path), results, str(annotated_path))
-            print(f"  Annotated screenshot: {annotated_path}")
+    if args.format in ("markdown", "both"):
+        md_path = reporter.generate_markdown()
+        print(f"  Markdown report: {md_path}")
 
-        if args.source_map:
-            from scripts.source_map_lookup import resolve_issues
+    if args.annotate:
+        from annotate_screenshot import annotate_screenshot
 
-            resolved = resolve_issues(results, a11y_elements, args.source_map)
-            for i, issue in enumerate(resolved):
-                if i < len(results):
-                    results[i]["source_location"] = issue.get("source_location", {})
+        annotated_path = Path(args.output) / "annotated.png"
+        annotate_screenshot(str(screenshot_path), results, str(annotated_path))
+        print(f"  Annotated screenshot: {annotated_path}")
 
-        summary = reporter._summary()
-        print(
-            f"\nDone in {duration:.1f}s — "
-            f"{summary['total']} checks: "
-            f"❌ {summary['error']} errors, "
-            f"⚠️ {summary['warning']} warnings, "
-            f"ℹ️ {summary['info']} info"
-        )
+    if args.source_map:
+        from scripts.source_map_lookup import resolve_issues
 
-        await browser.close()
+        resolved = resolve_issues(results, a11y_elements, args.source_map)
+        for i, issue in enumerate(resolved):
+            if i < len(results):
+                results[i]["source_location"] = issue.get("source_location", {})
+
+    summary = reporter._summary()
+    print(
+        f"\nDone in {duration:.1f}s — "
+        f"{summary['total']} checks: "
+        f"❌ {summary['error']} errors, "
+        f"⚠️ {summary['warning']} warnings, "
+        f"ℹ️ {summary['info']} info"
+    )
 
 
 def main():
     parser = argparse.ArgumentParser(description="PaddleOCR UI Test")
-    parser.add_argument("--url", required=True, help="Target URL")
+    parser.add_argument("--url", help="Target URL (required for URL mode)")
+    parser.add_argument(
+        "--input-mode",
+        choices=["auto", "url", "artifacts", "mcp"],
+        default="auto",
+        help="Input mode: url (default), artifacts directory, or mcp payload JSON",
+    )
+    parser.add_argument(
+        "--artifacts-dir",
+        help="Artifacts directory containing screenshot/a11y/dom files",
+    )
+    parser.add_argument(
+        "--input-json",
+        help="MCP payload JSON file (path-based payload in v1)",
+    )
+    parser.add_argument(
+        "--source",
+        help="Source label for metadata (e.g. dev-browser, playwright-mcp)",
+    )
     parser.add_argument("--config", help="Test config JSON file")
     parser.add_argument(
         "--levels",

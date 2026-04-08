@@ -53,7 +53,8 @@ PaddleOCR 填补了"像素"和"语义"之间的鸿沟——从截图中提取结
                            ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                    标准输入契约                                       │
-│          --url | --profile | --config | --levels | --annotate        │
+│   --url | --input-mode | --artifacts-dir | --input-json | --source   │
+│      + --profile | --config | --levels | --annotate | --baseline     │
 └──────────────────────────┬──────────────────────────────────────────┘
                            ▼
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -132,6 +133,25 @@ python3 scripts/ui_test.py --url https://example.com --config test-config.json -
 
 # 全面检查 + 标注截图
 python3 scripts/ui_test.py --url https://example.com --levels L1,L2,L3,L4,L5 --annotate
+
+# 消费预采集产物（dev-browser / Playwright MCP 输出）
+python3 scripts/ui_test.py --input-mode artifacts --artifacts-dir ./artifacts --source playwright-mcp
+
+# 消费 MCP payload JSON（v1 路径字段）
+python3 scripts/ui_test.py --input-mode mcp --input-json ./mcp-payload.json --source ui-test-generation-mcp
+```
+
+### MCP Payload（v1 路径型）
+
+```json
+{
+  "source": "playwright-mcp",
+  "url": "https://example.com",
+  "viewport": "1280x720",
+  "screenshot_path": "./artifacts/screenshot.png",
+  "a11y_tree_path": "./artifacts/a11y_tree.json",
+  "dom_path": "./artifacts/dom.html"
+}
 ```
 
 ### 5 个控制旋钮
@@ -180,10 +200,17 @@ paddleOCR-UItest/
 │   └── mobile.json                   # 移动端 H5
 ├── scripts/
 │   ├── ui_test.py                    # 主测试脚本
+│   ├── smoke_input_modes.py          # 输入模式轻量 smoke 检查
 │   ├── compare_ocr_dom.py            # OCR vs DOM 交叉验证引擎（支持 --ci）
 │   ├── baseline_diff.py              # 基线回归对比引擎
 │   ├── annotate_screenshot.py        # 标注截图生成
-│   └── source_map_lookup.py          # 源码位置映射
+│   ├── source_map_lookup.py          # 源码位置映射
+│   └── adapters/                     # 柔性输入适配层
+│       ├── base.py                   # Evidence bundle 契约
+│       ├── registry.py               # 自动输入模式选择
+│       ├── standalone_url.py         # 兼容原有 URL 采集模式
+│       ├── artifact_dir.py           # 消费 screenshot/a11y/dom 产物
+│       └── mcp_payload.py            # 消费 MCP payload JSON
 ├── references/
 │   ├── ocr-api.md                    # PaddleOCR API 配置
 │   ├── a11y-tree.md                  # 无障碍树格式
@@ -199,6 +226,17 @@ paddleOCR-UItest/
 - **dogfood**：探索性测试 → 发现的问题转为 `expected_texts` → 本 skill 做回归守卫
 - **dev-browser**：浏览器自动化 → 导航页面 → 本 skill 验证最终状态
 - **ui-ux-pro-max**：设计系统 → 定义预期 UI → 本 skill 验证实现匹配设计
+
+### 轻量柔性适配层
+
+- 保持 L1-L6 检测引擎不变，仅扩展输入采集边界。
+- 向后兼容：原有 `--url` 工作流保持不变。
+- 新增 MCP 友好输入模式：
+  - `--input-mode artifacts --artifacts-dir <dir>`
+  - `--input-mode mcp --input-json <file>`
+- 当前限制：`L6 --actions` 仅在 `url` 模式支持。
+
+完整协作协议与输入/输出契约见 `SKILL.md`。
 
 ## CI/CD 集成
 

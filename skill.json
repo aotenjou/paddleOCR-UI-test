@@ -1,5 +1,5 @@
 {
   "name": "paddleocr-ui-test",
   "description": "AI-driven UI testing skill combining PaddleOCR screenshot analysis with DOM/Accessibility Tree cross-validation",
-  "version": "0.1.0"
+  "version": "0.2.0"
 }
