@@ -19,64 +19,55 @@ PaddleOCR 填补了"像素"和"语义"之间的鸿沟——从截图中提取结
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                        上游输出 (任意格式)                            │
-├─────────────┬──────────────┬──────────────┬─────────────────────────┤
-│  dogfood    │ ui-ux-pro-   │ dev-browser  │ 用户自然语言             │
-│  自由文本   │ max 设计系统  │ 页面状态      │                         │
-└──────┬──────┴──────┬───────┴──────┬───────┴────────────┬────────────┘
-       │             │              │                    │
-       ▼             ▼              ▼                    ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                     适配层 (Agent 转换)                               │
-│                                                                     │
-│  ┌─────────────┐  ┌──────────────┐  ┌──────────────┐               │
-│  │ 文本提取     │  │ 规则映射      │  │ 产物复用      │               │
-│  │ 自由文本     │  │ 设计建议     │  │ 复用已有     │               │
-│  │ → expected  │  │ → L4 规则    │  │ 浏览器会话   │               │
-│  │   _texts    │  │ 设计文案     │  │ 不重新加载   │               │
-│  │             │  │ → expected_  │  │              │               │
-│  │             │  │   texts      │  │              │               │
-│  └──────┬──────┘  └──────┬───────┘  └──────┬───────┘               │
-│         │                │                  │                       │
-│         └────────────────┼──────────────────┘                       │
-│                          ▼                                          │
-│              ┌───────────────────────┐                              │
-│              │  意图识别 (决策树)      │                              │
-│              │  "检查页面" → standalone│                              │
-│              │  "全面检查" → 全 levels │                              │
-│              │  "探索再检查" → dogfood │                              │
-│              │  "和之前比" → baseline  │                              │
-│              │  "设计对不对" → 设计验证 │                              │
-│              │  "操作后检查" → 会话复用 │                              │
-│              └───────────┬───────────┘                              │
-└──────────────────────────┼──────────────────────────────────────────┘
-                           ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                    标准输入契约                                       │
-│   --url | --input-mode | --artifacts-dir | --input-json | --source   │
-│      + --profile | --config | --levels | --annotate | --baseline     │
+│                           输入适配层                                 │
+│      url 实时采集 | artifacts 目录 | MCP payload JSON               │
 └──────────────────────────┬──────────────────────────────────────────┘
                            ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                      本 skill 处理流程                                │
-│                                                                     │
-│  加载 rules/*.json → 阈值/策略/开关                                  │
-│  加载 profile      → levels/viewport/规则覆盖                        │
-│  Playwright 截图   → PaddleOCR 文字提取                              │
-│  A11y Tree 提取    → L1-L6 检测引擎                                  │
-│  BaselineDiff      → 回归对比 (可选)                                 │
+│                         Evidence Bundle                              │
+│ screenshot_path + a11y_tree + dom_html + capabilities + provenance  │
 └──────────────────────────┬──────────────────────────────────────────┘
                            ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    输出契约                                           │
-│       report.json | annotated.png | baseline.json | screenshot.png   │
+│                     Runtime Pipeline (core/)                         │
+│ collect_evidence -> run_ocr -> build_context -> execute_levels      │
+│ -> baseline/source-map enrich -> write_outputs                      │
 └──────────────────────────┬──────────────────────────────────────────┘
                            ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                      下游消费                                         │
-│  dev-browser ← 坐标定位 | dogfood ← 补充发现 | CI/CD ← 构建状态      │
+│                    Detector Registry (engines/)                      │
+│      L1 文本 | L2 布局 | L3 DOM | L4 无障碍 | L5 i18n | L6 动态内容   │
+│           按能力执行：executed 或 skipped，并记录原因               │
+└──────────────────────────┬──────────────────────────────────────────┘
+                           ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                       统一报告载荷                                   │
+│    report.json 为事实源 + markdown/junit/sarif 派生输出             │
+│ snapshots + detector_execution + source_map_execution 元数据        │
 └─────────────────────────────────────────────────────────────────────┘
 ```
+
+### 运行时 Pipeline
+
+运行时流程现在固定为 `scripts/core/pipeline.py` 中的分阶段管线：
+
+1. `collect_evidence`：把 `url`、`artifacts`、`mcp` 三种输入统一归一成一个 `EvidenceBundle`
+2. `run_ocr_stage`：调用选定 OCR provider，必要时为 `L6` 生成前后 OCR 快照
+3. `build_detection_context`：构建共享的 `DetectionContext`
+4. `execute_levels`：执行内建 detector，并统一做能力检查
+5. `apply_baseline_stage` 与 `enrich_findings`：追加 baseline 回归结果和可选 source-map 定位
+6. `write_output_stage`：写出 `report.json` 及其派生格式
+
+### 能力模型
+
+每个 `EvidenceBundle` 都携带 `capabilities`，包括：
+
+- `has_dom`
+- `has_a11y`
+- `has_actions`
+- `has_source_map`
+
+各 detector 在 `scripts/engines/` 中声明所需能力。能力缺失时不会静默跳过，而会在 `report.json -> metadata.detector_execution` 中记录为 skipped，并带上原因。
 
 ## 安装
 
@@ -164,6 +155,12 @@ python3 scripts/ui_test.py --input-mode mcp --input-json ./mcp-payload.json --so
 | 具体期望 | `--config` | 预期文字、语言等 |
 | 回归对比 | `--baseline` | 保存基线或与历史对比 |
 
+### 配置契约
+
+- `rules/*.json`、`profiles/*.json` 和运行时 `--config` 都会按显式允许字段做校验。
+- 运行时配置里的未知字段现在会直接报错，而不是静默忽略。
+- profile 与 runtime config 会先合并成一份统一执行配置，再进入 detector 阶段。
+
 ## 测试级别
 
 | 级别 | 场景 | 检测方法 |
@@ -199,22 +196,37 @@ paddleOCR-UItest/
 │   ├── dashboard.json                # 数据大屏
 │   └── mobile.json                   # 移动端 H5
 ├── scripts/
-│   ├── ui_test.py                    # 主测试脚本
+│   ├── ui_test.py                    # 轻量 CLI 编排入口
 │   ├── smoke_input_modes.py          # 输入模式轻量 smoke 检查
 │   ├── compare_ocr_dom.py            # OCR vs DOM 交叉验证引擎（支持 --ci）
 │   ├── baseline_diff.py              # 基线回归对比引擎
 │   ├── annotate_screenshot.py        # 标注截图生成
 │   ├── source_map_lookup.py          # 源码位置映射
-│   └── adapters/                     # 柔性输入适配层
-│       ├── base.py                   # Evidence bundle 契约
-│       ├── registry.py               # 自动输入模式选择
-│       ├── standalone_url.py         # 兼容原有 URL 采集模式
-│       ├── artifact_dir.py           # 消费 screenshot/a11y/dom 产物
-│       └── mcp_payload.py            # 消费 MCP payload JSON
+│   ├── core/                         # 共享契约与运行时 pipeline
+│   │   ├── models.py                 # EvidenceBundle、Issue、DetectionContext、执行记录
+│   │   ├── config.py                 # 严格规则/配置/profile 加载与合并
+│   │   ├── pipeline.py               # collect_evidence/run_ocr/... 分阶段运行
+│   │   ├── reporting.py              # 统一报告载荷 + json/markdown/junit/sarif 输出
+│   │   ├── baseline.py               # baseline 生成与 diff 逻辑
+│   │   ├── a11y.py                   # 共享 a11y tree flatten 逻辑
+│   │   └── text_utils.py             # 共享 OCR/DOM 文本匹配工具
+│   ├── engines/                      # 内建 L1-L6 检测器与能力感知 registry
+│   │   ├── base.py                   # Detector 基类与描述信息
+│   │   └── registry.py               # execute_levels + detector 元数据
+│   ├── providers/                    # OCR provider 抽象（默认 paddleocr-vl）
+│   │   └── ocr.py                    # Provider registry 与 provider 描述
+│   └── adapters/                     # 输入适配层
+│       ├── base.py                   # Input adapter 基础契约
+│       ├── registry.py               # 输入模式识别 + adapter 描述信息
+│       ├── standalone_url.py         # 基于 Playwright 的实时采集
+│       ├── artifact_dir.py           # 文件系统 artifact bundle 加载
+│       └── mcp_payload.py            # 路径型 MCP payload 加载
 ├── references/
 │   ├── ocr-api.md                    # PaddleOCR API 配置
 │   ├── a11y-tree.md                  # 无障碍树格式
 │   └── test-patterns.md              # 常见测试模式 + CI/CD 示例
+├── tests/
+│   └── test_architecture.py          # 架构、能力模型与报告契约回归测试
 └── examples/
     └── test-config.json              # 测试配置示例
 ```
@@ -227,14 +239,26 @@ paddleOCR-UItest/
 - **dev-browser**：浏览器自动化 → 导航页面 → 本 skill 验证最终状态
 - **ui-ux-pro-max**：设计系统 → 定义预期 UI → 本 skill 验证实现匹配设计
 
-### 轻量柔性适配层
+### 当前执行模型
 
-- 保持 L1-L6 检测引擎不变，仅扩展输入采集边界。
+- 内部围绕统一 evidence 契约运行，而不是按不同输入模式维护多套执行流程。
 - 向后兼容：原有 `--url` 工作流保持不变。
-- 新增 MCP 友好输入模式：
+- 增加对外部采集结果友好的输入模式：
   - `--input-mode artifacts --artifacts-dir <dir>`
   - `--input-mode mcp --input-json <file>`
-- 当前限制：`L6 --actions` 仅在 `url` 模式支持。
+- `L6 --actions` 仅在 `url` 模式支持。
+- `report.json` 是主事实源，markdown、JUnit、SARIF 都从它派生。
+
+### 输出与 Provider 扩展
+
+- 新增报告格式：`--format junit`、`--format sarif`、`--format all`
+- OCR 后端改为 provider 化：`--ocr-provider paddleocr-vl`
+- `report.json` 现在包含：
+  - `snapshots.ocr_texts`
+  - `snapshots.a11y_elements`
+  - `metadata.detector_execution`
+  - `metadata.source_map_execution`
+- `baseline_diff.py` 可以直接消费归一化后的 `report.json` snapshots 做回归对比
 
 完整协作协议与输入/输出契约见 `SKILL.md`。
 

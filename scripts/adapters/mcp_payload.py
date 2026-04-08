@@ -8,6 +8,8 @@ from .base import EvidenceBundle, InputAdapter
 
 class MCPPayloadAdapter(InputAdapter):
     name = "mcp"
+    description = "Load evidence from a path-based MCP payload."
+    produced_capabilities = ("has_dom", "has_a11y")
 
     async def load_bundle(self) -> EvidenceBundle:
         input_json_path = Path(self.args.input_json).resolve()
@@ -50,4 +52,12 @@ class MCPPayloadAdapter(InputAdapter):
             viewport=payload.get("viewport", self.args.viewport or ""),
             source=self.args.source or payload.get("source", "mcp"),
             extras={"input_json": str(input_json_path)},
+            capabilities={
+                "has_dom": bool(dom_html),
+                "has_a11y": bool(a11y_tree),
+                "has_actions": False,
+            },
+            provenance={
+                "input_json": str(input_json_path),
+            },
         )

@@ -1,30 +1,29 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-
-@dataclass
-class EvidenceBundle:
-    screenshot_path: str
-    a11y_tree: Dict[str, Any] = field(default_factory=dict)
-    dom_html: Optional[str] = None
-    url: str = ""
-    viewport: str = ""
-    source: str = "standalone"
-    state: str = "current"
-    extras: Dict[str, Any] = field(default_factory=dict)
+from core.models import EvidenceBundle
 
 
 class InputAdapter:
     name = "base"
+    description = ""
+    produced_capabilities: tuple[str, ...] = ()
 
     def __init__(self, args: Any):
         self.args = args
 
     async def load_bundle(self) -> EvidenceBundle:
         raise NotImplementedError
+
+    @classmethod
+    def descriptor(cls) -> Dict[str, Any]:
+        return {
+            "name": cls.name,
+            "description": cls.description,
+            "produced_capabilities": list(cls.produced_capabilities),
+        }
 
     @staticmethod
     def _resolve_path(path_value: str, base_dir: Optional[Path] = None) -> Path:

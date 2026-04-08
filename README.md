@@ -19,64 +19,55 @@ PaddleOCR bridges the gap between "pixels" and "semantics" — extracting struct
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                     Upstream Output (Any Format)                     │
-├─────────────┬──────────────┬──────────────┬─────────────────────────┤
-│  dogfood    │ ui-ux-pro-   │ dev-browser  │ User Natural Language    │
-│  Free Text  │ max Design   │ Page State   │                         │
-└──────┬──────┴──────┬───────┴──────┬───────┴────────────┬────────────┘
-       │             │              │                    │
-       ▼             ▼              ▼                    ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                     Adaptation Layer (Agent Transform)               │
-│                                                                     │
-│  ┌─────────────┐  ┌──────────────┐  ┌──────────────┐               │
-│  │ Text Extract │  │ Rule Mapping  │  │ Artifact Reuse│               │
-│  │ Free text    │  │ Design advice│  │ Reuse existing│               │
-│  │ → expected  │  │ → L4 rules   │  │ browser session│              │
-│  │   _texts    │  │ Design copy  │  │ No reload     │               │
-│  │             │  │ → expected_  │  │               │               │
-│  │             │  │   texts      │  │               │               │
-│  └──────┬──────┘  └──────┬───────┘  └──────┬───────┘               │
-│         │                │                  │                       │
-│         └────────────────┼──────────────────┘                       │
-│                          ▼                                          │
-│              ┌───────────────────────┐                              │
-│              │  Intent Recognition     │                              │
-│              │  "check page" → standalone│                            │
-│              │  "full check" → all levels│                            │
-│              │  "explore then check" → dogfood│                       │
-│              │  "compare with before" → baseline│                     │
-│              │  "design correct?" → design verify│                    │
-│              │  "check after action" → session reuse│                 │
-│              └───────────┬───────────┘                              │
-└──────────────────────────┼──────────────────────────────────────────┘
-                           ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                    Standard Input Contract                           │
-│   --url | --input-mode | --artifacts-dir | --input-json | --source   │
-│      + --profile | --config | --levels | --annotate | --baseline     │
+│                          Input Adapters                              │
+│    url capture | artifacts directory | MCP payload JSON             │
 └──────────────────────────┬──────────────────────────────────────────┘
                            ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                      Skill Processing Pipeline                       │
-│                                                                     │
-│  Load rules/*.json → thresholds/strategies/toggles                   │
-│  Load profile      → levels/viewport/rule overrides                  │
-│  Playwright screenshot → PaddleOCR text extraction                   │
-│  A11y Tree extract → L1-L6 detection engine                          │
-│  BaselineDiff      → regression comparison (optional)                │
+│                        Evidence Bundle                               │
+│ screenshot_path + a11y_tree + dom_html + capabilities + provenance  │
 └──────────────────────────┬──────────────────────────────────────────┘
                            ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    Output Contract                                   │
-│       report.json | annotated.png | baseline.json | screenshot.png   │
+│                     Runtime Pipeline (core/)                         │
+│ collect_evidence -> run_ocr -> build_context -> execute_levels      │
+│ -> baseline/source-map enrich -> write_outputs                      │
 └──────────────────────────┬──────────────────────────────────────────┘
                            ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                      Downstream Consumption                          │
-│  dev-browser ← coordinate locate | dogfood ← new findings | CI/CD   │
+│                    Detector Registry (engines/)                      │
+│          L1 text | L2 layout | L3 DOM | L4 a11y | L5 i18n | L6 dynamic │
+│      capability-aware execution: executed or skipped with reason    │
+└──────────────────────────┬──────────────────────────────────────────┘
+                           ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                       Unified Report Payload                         │
+│   report.json as source of truth + markdown/junit/sarif derivatives │
+│ snapshots + detector_execution + source_map_execution metadata      │
 └─────────────────────────────────────────────────────────────────────┘
 ```
+
+### Runtime Pipeline
+
+The runtime now follows a strict staged pipeline in `scripts/core/pipeline.py`:
+
+1. `collect_evidence`: normalize `url`, `artifacts`, or `mcp` inputs into one `EvidenceBundle`
+2. `run_ocr_stage`: call the selected OCR provider and optionally capture before/after OCR for `L6`
+3. `build_detection_context`: construct the shared `DetectionContext`
+4. `execute_levels`: run built-in detectors with capability checks
+5. `apply_baseline_stage` and `enrich_findings`: append regression findings and optional source-map locations
+6. `write_output_stage`: emit `report.json` and derived formats
+
+### Capability Model
+
+Each evidence bundle carries `capabilities` such as:
+
+- `has_dom`
+- `has_a11y`
+- `has_actions`
+- `has_source_map`
+
+Detectors declare required capabilities in `scripts/engines/`. Missing requirements do not fail silently; they are recorded in `report.json -> metadata.detector_execution` as skipped detectors with explicit reasons.
 
 ## Installation
 
@@ -164,6 +155,12 @@ python3 scripts/ui_test.py --input-mode mcp --input-json ./mcp-payload.json --so
 | Specific Expectations | `--config` | Expected texts, language, etc. |
 | Regression Compare | `--baseline` | Save baseline or diff against history |
 
+### Config Contract
+
+- `rules/*.json`, `profiles/*.json`, and runtime `--config` are validated against explicit allowed keys.
+- Unknown runtime config keys now fail fast instead of being silently ignored.
+- Profile and runtime config merge into a single execution config before detector execution.
+
 ## Test Levels
 
 | Level | Scenario | Method |
@@ -199,22 +196,37 @@ paddleOCR-UItest/
 │   ├── dashboard.json                # Data dashboards
 │   └── mobile.json                   # Mobile H5 pages
 ├── scripts/
-│   ├── ui_test.py                    # Main test runner
+│   ├── ui_test.py                    # Thin CLI orchestrator
 │   ├── smoke_input_modes.py          # Lightweight adapter smoke checks
 │   ├── compare_ocr_dom.py            # Standalone OCR vs DOM validator (--ci)
 │   ├── baseline_diff.py              # Baseline regression engine
 │   ├── annotate_screenshot.py        # Annotated screenshot generator
 │   ├── source_map_lookup.py          # Source code location resolver
-│   └── adapters/                     # Flexible input adapters
-│       ├── base.py                   # Evidence bundle contract
-│       ├── registry.py               # Auto input-mode selection
-│       ├── standalone_url.py         # Backward-compatible URL capture
-│       ├── artifact_dir.py           # Consume screenshot/a11y/dom artifacts
-│       └── mcp_payload.py            # Consume MCP payload JSON
+│   ├── core/                         # Shared contracts and runtime pipeline
+│   │   ├── models.py                 # EvidenceBundle, Issue, DetectionContext, execution records
+│   │   ├── config.py                 # Strict rules/profile/runtime-config loading and merging
+│   │   ├── pipeline.py               # collect_evidence/run_ocr/... staged runtime
+│   │   ├── reporting.py              # Unified report payload + json/markdown/junit/sarif writers
+│   │   ├── baseline.py               # Baseline creation and diff logic
+│   │   ├── a11y.py                   # Shared a11y tree flattening
+│   │   └── text_utils.py             # Shared OCR/DOM text matching utilities
+│   ├── engines/                      # Built-in L1-L6 detectors and capability-aware registry
+│   │   ├── base.py                   # Detector base class and descriptors
+│   │   └── registry.py               # execute_levels + detector metadata
+│   ├── providers/                    # OCR provider abstraction (default: paddleocr-vl)
+│   │   └── ocr.py                    # Provider registry and provider descriptors
+│   └── adapters/                     # Input adapters
+│       ├── base.py                   # Input adapter base contract
+│       ├── registry.py               # Input-mode detection + adapter descriptors
+│       ├── standalone_url.py         # Playwright-based live capture
+│       ├── artifact_dir.py           # Filesystem artifact bundle loader
+│       └── mcp_payload.py            # Path-based MCP payload loader
 ├── references/
 │   ├── ocr-api.md                    # PaddleOCR API configuration
 │   ├── a11y-tree.md                  # Accessibility tree format
 │   └── test-patterns.md              # Common test patterns + CI/CD example
+├── tests/
+│   └── test_architecture.py          # Architecture, capability, and report-contract regression tests
 └── examples/
     └── test-config.json              # Test config example
 ```
@@ -227,14 +239,26 @@ This skill is designed to work alongside other UI testing skills:
 - **dev-browser**: Browser automation → navigates pages → this skill validates the final state
 - **ui-ux-pro-max**: Design system → defines expected UI → this skill verifies implementation matches design
 
-### Flexible Adapter Layer (lightweight)
+### Current Execution Model
 
-- Keeps existing L1-L6 engine unchanged; only extends input ingestion layer.
+- Built around one internal evidence contract rather than separate pipelines for each input mode.
 - Backward compatible: existing `--url` workflow still works.
-- Adds downstream-friendly modes for MCP outputs:
+- Adds downstream-friendly modes for external captures:
   - `--input-mode artifacts --artifacts-dir <dir>`
   - `--input-mode mcp --input-json <file>`
-- Current limitation: `L6 --actions` is supported in `url` mode only.
+- `L6 --actions` is supported in `url` mode only.
+- `report.json` is the canonical output payload; markdown, JUnit, and SARIF are derived from it.
+
+### Output and Provider Extensions
+
+- New report formats: `--format junit`, `--format sarif`, or `--format all`
+- OCR backend is now provider-based: `--ocr-provider paddleocr-vl`
+- `report.json` now includes:
+  - `snapshots.ocr_texts`
+  - `snapshots.a11y_elements`
+  - `metadata.detector_execution`
+  - `metadata.source_map_execution`
+- `baseline_diff.py` can consume normalized `report.json` snapshots directly for regression comparison
 
 See `SKILL.md` for the full integration protocol including input/output contracts and collaboration modes.
 

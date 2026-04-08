@@ -101,6 +101,15 @@ async def capture_from_url(
             url=url,
             viewport=viewport,
             source=source,
+            capabilities={
+                "has_dom": bool(dom_html),
+                "has_a11y": bool(a11y_tree),
+                "has_actions": bool(actions),
+            },
+            provenance={
+                "browser": "playwright-chromium",
+                "capture_mode": "standalone_url",
+            },
         ),
         after_path,
     )

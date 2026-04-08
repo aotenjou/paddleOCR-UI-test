@@ -157,9 +157,9 @@ def main():
     dom_elements = load_json(args.dom)
 
     if isinstance(dom_elements, dict):
-        from compare_ocr_dom import flatten_a11y_tree
+        from core.a11y import flatten_a11y_tree
 
-        dom_elements = flatten_a11y_tree(dom_elements)
+        dom_elements = flatten_a11y_tree(dom_elements, leaf_only=False)
 
     resolved = resolve_issues(issues, dom_elements, args.source_map)
 

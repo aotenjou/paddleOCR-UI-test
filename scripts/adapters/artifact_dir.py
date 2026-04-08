@@ -9,6 +9,8 @@ from .base import EvidenceBundle, InputAdapter
 
 class ArtifactDirAdapter(InputAdapter):
     name = "artifacts"
+    description = "Load screenshot and optional DOM/A11y artifacts from a directory."
+    produced_capabilities = ("has_dom", "has_a11y")
 
     async def load_bundle(self) -> EvidenceBundle:
         artifacts_dir = Path(self.args.artifacts_dir).resolve()
@@ -30,6 +32,15 @@ class ArtifactDirAdapter(InputAdapter):
             viewport=meta.get("viewport", self.args.viewport or ""),
             source=self.args.source or meta.get("source", "artifacts"),
             extras={"artifacts_dir": str(artifacts_dir)},
+            capabilities={
+                "has_dom": bool(dom_html),
+                "has_a11y": bool(a11y_tree),
+                "has_actions": False,
+            },
+            provenance={
+                "artifacts_dir": str(artifacts_dir),
+                "metadata_file": str(artifacts_dir / "metadata.json"),
+            },
         )
 
     def _find_screenshot(self, artifacts_dir: Path) -> Path:
