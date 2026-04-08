@@ -1,0 +1,82 @@
+flowchart TB
+  subgraph INPUT["Input Layer"]
+    direction TB
+    CLI["CLI Entry<br/>scripts/ui_test.py"]
+    MODES["Input modes<br/>url | artifacts | mcp"]
+    CFG["Config sources<br/>rules/*.json<br/>profiles/*.json<br/>runtime --config"]
+    CLI --> MODES
+    CLI --> CFG
+  end
+
+  subgraph CONTRACTS["Unified Contracts"]
+    direction LR
+    EB["EvidenceBundle<br/>screenshot_path | a11y_tree | dom_html<br/>capabilities | provenance"]
+    DC["DetectionContext"]
+  end
+
+  subgraph PIPE["Runtime Pipeline"]
+    direction LR
+    ST1["collect_evidence"]
+    ST2["run_ocr_stage"]
+    ST3["build_detection_context"]
+    ST4["execute_levels"]
+    ST5["apply_baseline_stage<br/>enrich_findings"]
+    ST6["write_output_stage"]
+    ST1 --> ST2 --> ST3 --> ST4 --> ST5 --> ST6
+  end
+
+  subgraph DETECT["Detector Registry"]
+    direction TB
+    L1["L1 TextConsistencyDetector"]
+    L2["L2 LayoutReasonablenessDetector"]
+    L3["L3 DomConsistencyDetector<br/>requires: has_a11y"]
+    L4["L4 AccessibilityDetector<br/>requires: has_a11y"]
+    L5["L5 InternationalizationDetector"]
+    L6["L6 DynamicContentDetector<br/>requires: has_actions"]
+    CAP["Capability model<br/>has_dom | has_a11y | has_actions | has_source_map"]
+    SKIP["Missing capabilities are recorded as skipped<br/>with explicit reasons in detector_execution"]
+    CAP --> SKIP
+  end
+
+  subgraph SUPPORT["Supporting Modules"]
+    direction TB
+    OCR["providers/ocr.py<br/>default: paddleocr-vl"]
+    BASE["core/baseline.py<br/>baseline_diff.py"]
+    SMAP["source_map_lookup.py"]
+    QUAL["smoke_input_modes.py<br/>tests/test_architecture.py<br/>strict config validation"]
+  end
+
+  subgraph OUT["Outputs And Metadata"]
+    direction TB
+    RJSON["report.json<br/>source of truth"]
+    RDER["report.md<br/>report.junit.xml<br/>report.sarif.json"]
+    RFILES["annotated.png<br/>baseline.json<br/>screenshot.png"]
+    META["metadata.detector_execution<br/>metadata.source_map_execution<br/>snapshots.ocr_texts<br/>snapshots.a11y_elements"]
+  end
+
+  MODES --> ST1
+  CFG --> ST1
+  ST1 --> EB
+  EB --> ST2
+  ST2 --> OCR
+  ST3 --> DC
+  DC --> ST4
+  QUAL -.-> PIPE
+  ST4 --> L1
+  ST4 --> L2
+  ST4 --> L3
+  ST4 --> L4
+  ST4 --> L5
+  ST4 --> L6
+  L1 --> ST5
+  L2 --> ST5
+  L3 --> ST5
+  L4 --> ST5
+  L5 --> ST5
+  L6 --> ST5
+  BASE --> ST5
+  SMAP --> ST5
+  ST6 --> RJSON
+  ST6 --> RDER
+  ST6 --> RFILES
+  ST6 --> META

@@ -17,34 +17,91 @@ PaddleOCR 填补了"像素"和"语义"之间的鸿沟——从截图中提取结
 
 ## 架构
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                           输入适配层                                 │
-│      url 实时采集 | artifacts 目录 | MCP payload JSON               │
-└──────────────────────────┬──────────────────────────────────────────┘
-                           ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                         Evidence Bundle                              │
-│ screenshot_path + a11y_tree + dom_html + capabilities + provenance  │
-└──────────────────────────┬──────────────────────────────────────────┘
-                           ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                     Runtime Pipeline (core/)                         │
-│ collect_evidence -> run_ocr -> build_context -> execute_levels      │
-│ -> baseline/source-map enrich -> write_outputs                      │
-└──────────────────────────┬──────────────────────────────────────────┘
-                           ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                    Detector Registry (engines/)                      │
-│      L1 文本 | L2 布局 | L3 DOM | L4 无障碍 | L5 i18n | L6 动态内容   │
-│           按能力执行：executed 或 skipped，并记录原因               │
-└──────────────────────────┬──────────────────────────────────────────┘
-                           ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                       统一报告载荷                                   │
-│    report.json 为事实源 + markdown/junit/sarif 派生输出             │
-│ snapshots + detector_execution + source_map_execution 元数据        │
-└─────────────────────────────────────────────────────────────────────┘
+源文件：[docs/architecture.mmd](docs/architecture.mmd)
+
+```mermaid
+flowchart TB
+  subgraph INPUT["输入层"]
+    direction TB
+    CLI["CLI 入口<br/>scripts/ui_test.py"]
+    MODES["输入模式<br/>url | artifacts | mcp"]
+    CFG["配置来源<br/>rules/*.json<br/>profiles/*.json<br/>runtime --config"]
+    CLI --> MODES
+    CLI --> CFG
+  end
+
+  subgraph CONTRACTS["统一契约"]
+    direction LR
+    EB["EvidenceBundle<br/>screenshot_path | a11y_tree | dom_html<br/>capabilities | provenance"]
+    DC["DetectionContext"]
+  end
+
+  subgraph PIPE["运行时 Pipeline"]
+    direction LR
+    ST1["collect_evidence"]
+    ST2["run_ocr_stage"]
+    ST3["build_detection_context"]
+    ST4["execute_levels"]
+    ST5["apply_baseline_stage<br/>enrich_findings"]
+    ST6["write_output_stage"]
+    ST1 --> ST2 --> ST3 --> ST4 --> ST5 --> ST6
+  end
+
+  subgraph DETECT["Detector Registry"]
+    direction TB
+    L1["L1 TextConsistencyDetector"]
+    L2["L2 LayoutReasonablenessDetector"]
+    L3["L3 DomConsistencyDetector<br/>依赖：has_a11y"]
+    L4["L4 AccessibilityDetector<br/>依赖：has_a11y"]
+    L5["L5 InternationalizationDetector"]
+    L6["L6 DynamicContentDetector<br/>依赖：has_actions"]
+    CAP["能力模型<br/>has_dom | has_a11y | has_actions | has_source_map"]
+    SKIP["能力缺失时会记录为 skipped<br/>并写入 detector_execution"]
+    CAP --> SKIP
+  end
+
+  subgraph SUPPORT["辅助模块"]
+    direction TB
+    OCR["providers/ocr.py<br/>默认：paddleocr-vl"]
+    BASE["core/baseline.py<br/>baseline_diff.py"]
+    SMAP["source_map_lookup.py"]
+    QUAL["smoke_input_modes.py<br/>tests/test_architecture.py<br/>严格配置校验"]
+  end
+
+  subgraph OUT["输出与元数据"]
+    direction TB
+    RJSON["report.json<br/>事实源"]
+    RDER["report.md<br/>report.junit.xml<br/>report.sarif.json"]
+    RFILES["annotated.png<br/>baseline.json<br/>screenshot.png"]
+    META["metadata.detector_execution<br/>metadata.source_map_execution<br/>snapshots.ocr_texts<br/>snapshots.a11y_elements"]
+  end
+
+  MODES --> ST1
+  CFG --> ST1
+  ST1 --> EB
+  EB --> ST2
+  ST2 --> OCR
+  ST3 --> DC
+  DC --> ST4
+  QUAL -.-> PIPE
+  ST4 --> L1
+  ST4 --> L2
+  ST4 --> L3
+  ST4 --> L4
+  ST4 --> L5
+  ST4 --> L6
+  L1 --> ST5
+  L2 --> ST5
+  L3 --> ST5
+  L4 --> ST5
+  L5 --> ST5
+  L6 --> ST5
+  BASE --> ST5
+  SMAP --> ST5
+  ST6 --> RJSON
+  ST6 --> RDER
+  ST6 --> RFILES
+  ST6 --> META
 ```
 
 ### 运行时 Pipeline
