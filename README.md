@@ -1,3 +1,5 @@
+
+
 # PaddleOCR UI Test Skill
 
 > AI-driven UI testing skill combining PaddleOCR screenshot analysis with DOM/Accessibility Tree cross-validation.
@@ -244,7 +246,7 @@ python3 scripts/ui_test.py --input-mode mcp --input-json ./mcp-payload.json --so
 ## Project Structure
 
 ```
-paddleOCR-UItest/
+paddleOCR-UI-test/
 ├── SKILL.md                          # Agent instructions (5 control knobs)
 ├── skill.json                        # Skill metadata
 ├── README.md                         # English docs
